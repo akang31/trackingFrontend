@@ -1,0 +1,22 @@
+List in order of priority:
+- handle case when you try to replace an image so you actually remove and add
+- Make annotations show up on timeline
+- Add timeline for frame by frame
+- Add jump to frame
+
+Things that have been hacked:
+
+Things that have been done thoroughly:
+- Create objects for holding annotations
+	> Components:
+		Annotation Class:
+			time, topleft coordinate, width, height
+		List of annotations
+		Name of annotation
+		Thumbnail
+- Add ability to make annotations and associate them with objects/names
+- interpolation
+
+Current Framework:
+	Encapsulate every object so all occurrences are recorded
+

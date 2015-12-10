@@ -1,0 +1,341 @@
+<html>
+<head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<script>
+$(document).ready(function(){
+  var canvas= $("#cvs").get(0);
+  $("#vid").toggle();
+  var video;
+  var tr = 0.5;
+  var mr = 0.5;
+  var fps = 60;
+  var frames = [];
+  window.duration = $("#vid").get(0).duration;
+  console.log("window duration is " + window.duration);
+  for (var i = 0; i < $("#vid").get(0).duration*fps; i++) {
+    frames.push([]);
+  }
+  window.objects = [];
+  var unSet = 0;
+  var clicked = 0;
+  canvas.width = $(window).width()*0.5;
+  canvas.height = $(window).height()*0.5;
+  console.log(canvas.width + " " + canvas.height);
+  var diva = $("#main").get(0);
+  console.log(diva.offsetWidth + " " + diva.offsetHeight);
+  var timeline = $("#timeline").get(0);
+  timeline.width=$(window).width()*2;
+  timeline.height = $(window).height()*0.5;
+  console.log("! " + timeline.width + " "+ timeline.height);
+  window.tl = [-1,-1];
+  window.move = [-1,-1];
+  var initialize = function() {
+    setTimeout(testDraw, 200);
+    $("#vid").on("seeked", drawBG);
+    $("#timeline").click(timelineClick);
+    $("#cvs").mousedown(md);
+    $("#cvs").mouseup(mu);
+    $("#cvs").mousemove(mv);
+    $("#addNew").click(addNew);
+    console.log("init");
+  };
+  var addNew = function() {
+    var objects = window.objects;
+    console.log(objects);
+    var name = prompt("Name your new annotation", "default");
+    var newtrack = track(name, objects.length);//, '#'+Math.floor(Math.random()*16777215).toString(16));
+    console.log("newtrack: " + newtrack);
+    console.log(newtrack.color);
+    objects.push(newtrack);
+    createDiv(newtrack);
+  }
+  var mu = function(e) {
+    var mp = mousePos($(this), e);
+    if (mp.Y > canvas.height*0.9) {
+      var result = prompt("Skip to frame:", Math.floor(video.currentTime*60))
+      video.currentTime = result/60;
+    }
+    var tl = window.tl;
+    move = [mp.X-tl.X, mp.Y-tl.Y];
+    if (move[0] < 0) {
+      tl.X += move[0];
+      move[0] *= -1;
+    }
+    if (move[1] < 0) {
+      tl.Y += move[1];
+      move[1] *= -1;
+    }
+    window.unSet = 1;
+    window.clicked = 0;
+  };
+  var md = function(e) {
+    var mp = mousePos($(this), e);
+    window.tl = mp;
+    window.clicked = 1;
+  };
+  var mv = function(e) {
+    console.log(window.clicked);
+    if (window.clicked == undefined || window.clicked == 0) {
+      return;
+    }
+    var mp = mousePos($(this), e);
+    drawBG();
+    console.log(window.tl);
+    var tl = window.tl;
+    console.log(tl);
+    var ctx = $("#cvs").get(0).getContext('2d');
+    ctx.beginPath();
+    ctx.globalAlpha = 0.2;
+    ctx.fillStyle = '#FF0000';
+    ctx.fillRect(tl.X, tl.Y, mp.X-tl.X, mp.Y-tl.Y);
+    ctx.globalAlpha = 1.0;
+    console.log(tl.X + " " + tl.Y + " " + mp.X + " " + mp.Y);
+  };
+  var drawVideo = function() {
+    var ctx = $("#cvs").get(0).getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(video, 0,0, canvas.width, canvas.height*0.9);
+    ctx.fillStyle = '#000000';
+    ctx.fillText("Frame: " + Math.floor(video.currentTime*60), 0, canvas.height*0.9+10);
+  }
+  var drawBG = function() {
+    // Take the time and draw the image first
+    var ctx = $("#cvs").get(0).getContext('2d');
+    drawVideo();
+    var objects = window.objects;
+    // For all images, find the location and draw
+    var time = video.currentTime;
+    console.log("time is: " + time);
+    for (var i = 0; i < objects.length; i++) {
+      console.log(objects[i].annotations.length);
+      var count = 0;
+      while (count < objects[i].annotations.length && objects[i].annotations[count].time <= time) {
+        console.log("Times: " + objects[i].annotations[count].time);
+        count++;
+      }
+      count--;
+      var toDraw = [0,0,0,0];
+      if (count >= 0 && count == objects[i].annotations.length-1) {
+        toDraw = [objects[i].annotations[count].topleft.X, objects[i].annotations[count].topleft.Y, objects[i].annotations[count].width, objects[i].annotations[count].height]
+      } else if (count >= 0 && count < objects[i].annotations.length-1) {
+        //interpolate
+        var obj1 = objects[i].annotations[count];
+        var obj2 = objects[i].annotations[count+1];
+        var timeDiff = obj2.time-obj1.time;
+        var curTime = time-obj1.time;
+        var ratio = curTime/timeDiff;
+        toDraw[0] = obj1.topleft.X+(obj2.topleft.X-obj1.topleft.X)*ratio;
+        toDraw[1] = obj1.topleft.Y+(obj2.topleft.Y-obj1.topleft.Y)*ratio;
+        toDraw[2] = obj1.width+(obj2.width-obj1.width)*ratio;
+        toDraw[3] = obj1.height+(obj2.height-obj1.height)*ratio;
+      }
+      if (count >= 0) {
+        console.log(toDraw);
+        ctx.beginPath();
+        //ctx.globalAlpha = 0.2;
+        ctx.fillStyle = objects[i].color;
+        ctx.strokeStyle= objects[i].color;
+        console.log("Color: " + objects[i].color);
+        ctx.rect(toDraw[0], toDraw[1], toDraw[2], toDraw[3]);
+        ctx.globalAlpha = 1.0;
+        ctx.stroke();
+        console.log('drawing');
+      }
+    }
+  }
+  var createDiv = function(annot) {
+    var objects = window.objects;
+    var build = "<div class = \'annot\' id = id_" + annot.name + ">";
+    build += "<canvas id=cvs_"+annot.name+"></canvas>";
+    build += annot.name;
+    build += "</div>";
+    $("#annotationHolder").prepend(build);
+    var but = $('<button/>', {
+      text: annot.name,
+      click: function() {
+        if (window.unSet == 1) {
+          window.unSet = 0;
+          var tl = window.tl;
+          var move = window.move;
+          console.log(objects);
+          console.log(tl);
+          console.log(move);
+          var a = annot.index;
+          objects[annot.index].annotations;
+          addInArray(objects[annot.index].annotations, tl, move, $("#vid").get(0).currentTime);
+          var cvs = $("#cvs_"+annot.name).get(0);
+          cvs.getContext('2d').clearRect(0,0, cvs.width, cvs.height);
+          drawVideo();
+          cvs.getContext('2d').putImageData(canvas.getContext('2d').getImageData(tl.X,tl.Y,move[0],move[1]),0,0);
+          addToTimeline(annot, $("#vid").get(0).currentTime);
+          console.log(objects[annot.index].annotations);
+          alert(annot.name);
+          drawBG();
+        }
+      }
+    });
+    $("#id_"+annot.name).append(but);
+    $("#id_"+annot.name).css('background-color', '');
+    $("#id_"+annot.name).css('background-color', annot.color);
+    // console.log($("#annotationHolder").html());
+    // console.log($("#annotationHolder").html());
+    // console.log('appending');
+  }
+  var addToTimeline = function(annot, time) {
+    console.log("we should be drawing to the timeline now");
+    var ctx = $("#timeline").get(0).getContext('2d');
+    ctx.beginPath();
+    ctx.fillStyle = annot.color;
+    ctx.strokeStyle = annot.color;
+    console.log(annot.color);
+    var timeline = $("#timeline").get(0);
+    var duration = $("#vid").get(0).duration;
+    console.log(timeline.width + " " + time + " " + duration);
+    console.log(timeline.width*time/duration + " " + timeline.height);
+    ctx.fillRect(time/duration*timeline.width,timeline.height/2, 5, 5);
+    ctx.stroke();
+  }
+  var addInArray = function(arr, tl, move, time) {
+    var i = 0;
+    while (i < arr.length && arr[i].time < time) {
+      i++;
+    }
+    arr.splice(i, 0, annotation(time, tl, move[0], move[1], canvas.getContext('2d').getImageData(tl.X,tl.Y,move[0],move[1])));
+    for (var a = 0; a < arr.length; a++) {
+      console.log("ARRAY: " + arr[a].time);
+    }
+    console.log("ARRAY: " + arr.join());
+  }
+  var track = function(name, num) {
+    return {
+      'name':name.replace(" ", "_"),
+      'index': num,
+      'color': '#'+('000000'+Math.floor(Math.random()*16777215).toString(16)).slice(-6),
+      'annotations':[]
+    };
+  }
+  var annotation = function(time, topleft, width, height, img) {
+    return {
+      'time':time,
+      'topleft':topleft,
+      'width':width,
+      'height':height,
+      'image':img
+    };
+  }
+  var testDraw = function() {
+    video = $("#vid").get(0);
+    var ctx = canvas.getContext("2d");
+    //ctx.drawImage(video, 0,0, canvas.width, canvas.height);
+    drawVideo();
+    console.log(canvas.width + " " + canvas.height);
+    var ctx2 = timeline.getContext("2d");
+    ctx2.fillStyle = '#FF0000';
+    ctx2.fillRect(0,0, timeline.width, timeline.height);
+    console.log(timeline.width + " " + timeline.height);
+    ctx2.fillStyle = '#000000';
+    for (var i = 0; i < video.duration; i += 10) {
+      ctx2.beginPath();
+      ctx2.moveTo(timeline.width/video.duration*i, 0);
+      ctx2.lineTo(timeline.width/video.duration*i, timeline.height);
+      ctx2.stroke();
+    }
+  };
+  var timelineClick = function(e) {
+    video = $("#vid").get(0);
+    var mp = mousePos($(this), e);
+    console.log("scrollbar: " + $("#casing").get(0).scrollLeft)
+    var loc = mp.X/timeline.width*video.duration
+      + $("#casing").get(0).scrollLeft/$(window).width()/2*video.duration;
+    video.currentTime = loc;
+    video.play();
+    video.pause();
+    console.log("time: " + video.currentTime);
+    // testDraw();
+    // var ctx = canvas.getContext("2d");
+    // ctx.drawImage(video, 0,0, canvas.width, canvas.height);
+  }
+  var mousePos = function(context,e) {
+    var parentOffset = context.parent().offset();
+    return {
+      'X': e.pageX-parentOffset.left,
+      'Y': e.pageY-parentOffset.top
+    };
+  }
+  // var object = function(name, time, imagedata) {
+  //   return {
+  //     'name':name;
+  //     'times':[time];
+  //     'imagedata':imagedata;
+  //   };
+  // };
+  // var rect = function(X, Y, W, H) {
+  //   return {
+  //     'X':X;
+  //     'Y':Y;
+  //     'W':W;
+  //     'H':H;
+  //   };
+  // };
+  $(initialize);
+});
+</script>
+<style>
+* { margin: 0; padding: 0;}
+#main {
+  display: block;
+  width: 100vw;
+  height: 50vh;
+  overflow: hidden;
+  white-space: nowrap;
+}
+#annotationHolder {
+  float:right;
+  position:static;
+  display: inline;
+  width:50vw;
+  height:50vh;
+  overflow-y: scroll;
+  overflow-x:hidden;
+}
+#cvs {
+  display: inline;
+  float:left;
+  width:50vw;
+  height:50vh;
+}
+#objects {
+  width:50vw;
+  height:50vh;
+}
+#casing {
+  width:100vw;
+  height:50vh;
+  overflow-y:hidden;
+  overflow-x: scroll;
+}
+nav {
+  display: inline-block;
+}
+nav ul{height:200px; width:18%;}
+nav ul{overflow:hidden; overflow-y:scroll;}
+</style>
+</head>
+<body>
+<!--
+  <button id="capture">Capture</button><br> -->
+  <video id="vid" src="test.mp4" controls>
+  </video>
+  <div id="main">
+    <canvas id="cvs">
+    </canvas>
+    <div id="annotationHolder">
+      <button id="addNew"> Add New Object </button>
+    </div>
+  </div>
+  <div id="casing">
+    <canvas id="timeline">
+    </canvas>
+  </div>
+</body>
+</html>
